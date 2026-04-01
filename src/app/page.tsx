@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import ForceGraph from '@/components/Graph/ForceGraph';
 import SearchPanel from '@/components/Panels/SearchPanel';
 import NodeDetailPanel from '@/components/Panels/NodeDetailPanel';
@@ -11,7 +11,13 @@ import { useNodeSelection } from '@/hooks/useNodeSelection';
 import { useTheme } from '@/hooks/useTheme';
 import { GraphNode } from '@/lib/types';
 
+const ACCESS_CODE = 'Joucas-84';
+
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState(false);
+
   const {
     graphData,
     filteredData,
@@ -29,7 +35,10 @@ export default function Home() {
     clearSelection,
   } = useNodeSelection();
 
-  const { isDark, colors, toggleTheme } = useTheme();
+  const { isDark, colors } = useTheme();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const graphRef = useRef<any>(null);
 
   const handleNodeSelect = useCallback(
     (node: GraphNode) => {
@@ -37,6 +46,54 @@ export default function Home() {
     },
     [selectNode]
   );
+
+  const handleResetView = useCallback(() => {
+    clearSelection();
+    if (graphRef.current?.resetView) {
+      graphRef.current.resetView();
+    }
+  }, [clearSelection]);
+
+  const handleCodeSubmit = () => {
+    if (codeInput === ACCESS_CODE) {
+      setIsAuthenticated(true);
+      setCodeError(false);
+    } else {
+      setCodeError(true);
+    }
+  };
+
+  // Access gate
+  if (!isAuthenticated) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#101018]">
+        <div className="w-[360px] text-center">
+          <div className="text-3xl font-bold text-white/80 mb-2">FFB Digital Brain</div>
+          <p className="text-white/30 text-sm mb-8">Accès réservé</p>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={codeInput}
+              onChange={e => { setCodeInput(e.target.value); setCodeError(false); }}
+              onKeyDown={e => e.key === 'Enter' && handleCodeSubmit()}
+              placeholder="Code d'accès"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-center text-sm outline-none focus:border-white/25 transition-colors placeholder-white/25"
+              autoFocus
+            />
+            {codeError && (
+              <p className="text-red-400/80 text-xs">Code incorrect</p>
+            )}
+            <button
+              onClick={handleCodeSubmit}
+              className="w-full bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl px-4 py-3 text-white/80 text-sm transition-colors"
+            >
+              Accéder
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoaded) {
     return (
@@ -52,6 +109,7 @@ export default function Home() {
   return (
     <main className="relative h-full w-full">
       <ForceGraph
+        ref={graphRef}
         data={filteredData}
         selectedNode={selectedNode}
         hoveredNode={hoveredNode}
@@ -79,28 +137,22 @@ export default function Home() {
         colors={colors}
       />
 
-      {/* Theme toggle — top right */}
+      {/* Reset view button — bottom center */}
       <button
-        onClick={toggleTheme}
-        className="absolute top-4 right-14 z-30 p-2.5 rounded-xl backdrop-blur-xl border transition-colors"
+        onClick={handleResetView}
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl backdrop-blur-xl text-xs transition-all hover:scale-105"
         style={{
-          background: colors.inputBg,
+          background: colors.panelBg,
+          borderWidth: 1,
+          borderStyle: 'solid',
           borderColor: colors.panelBorder,
+          color: colors.textMuted,
         }}
-        title={isDark ? 'Mode clair' : 'Mode sombre'}
       >
-        {isDark ? (
-          <svg className="w-4 h-4" fill="none" stroke="rgba(255,255,255,0.6)" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4" fill="none" stroke="rgba(0,0,0,0.6)" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-        )}
+        Réinitialiser la vue
       </button>
 
-      <div className="absolute bottom-4 right-4 z-10 text-xs" style={{ color: colors.textDim }}>
+      <div className="absolute bottom-5 right-4 z-10 text-xs" style={{ color: colors.textDim }}>
         {graphData.nodes.length} noeuds &middot; {graphData.links.length} liens
       </div>
     </main>

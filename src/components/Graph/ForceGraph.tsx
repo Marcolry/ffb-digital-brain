@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useRef, useMemo, useEffect } from 'react';
+import { useCallback, useRef, useMemo, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { GraphNode, GraphData } from '@/lib/types';
 import { getNodeColor, getNodeGlowColor, BACKGROUND_COLOR } from '@/lib/colors';
 import { getNeighborIds } from '@/lib/graph-utils';
@@ -99,7 +99,7 @@ function positionInDisc(nodes: GraphNode[]): GraphNode[] {
   return positioned;
 }
 
-export default function ForceGraph({
+const ForceGraph = forwardRef(function ForceGraph({
   data,
   selectedNode,
   hoveredNode,
@@ -107,7 +107,7 @@ export default function ForceGraph({
   onNodeHover,
   isDark,
   colors,
-}: ForceGraphProps) {
+}: ForceGraphProps, ref) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
 
@@ -123,12 +123,8 @@ export default function ForceGraph({
   const discData = useMemo(() => {
     const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-    // Available space: full height, width minus left panel
-    const availW = w - 340;
-    const availH = h;
-    // Fill as much as possible
-    DISC_RADIUS = Math.min(availW, availH) * 0.45;
-    DISC_RADIUS = Math.max(200, DISC_RADIUS);
+    // Compact disc — camera zoom will fill the screen
+    DISC_RADIUS = 280;
     return {
       ...data,
       nodes: positionInDisc(data.nodes),
@@ -142,14 +138,22 @@ export default function ForceGraph({
     fg.d3Force('charge', null);
     fg.d3Force('link', null);
     fg.d3Force('center', null);
-    // Zoom to fit — tight padding, offset for left panel
+    // Animate: briefly enable forces so nodes "breathe", then freeze
+    fg.d3Force('charge')?.strength(-8);
+    fg.d3AlphaTarget(0.3);
+    fg.zoom(1, 0);
+    fg.centerAt(0, 0, 0);
+
+    // After 1.2s of alive movement, freeze and zoom to final view
     setTimeout(() => {
-      fg.zoomToFit(400, 10);
-      setTimeout(() => {
-        const z = fg.zoom();
-        fg.centerAt(170 / z, 0, 300);
-      }, 500);
-    }, 100);
+      fg.d3AlphaTarget(0);
+      fg.d3Force('charge', null);
+      fg.d3Force('link', null);
+      fg.d3Force('center', null);
+      // Re-fix positions
+      data.nodes.forEach((n: any) => { n.fx = n.x; n.fy = n.y; });
+      setTimeout(() => resetView(), 200);
+    }, 1200);
   }, [data]);
 
   const nodeCanvasObject = useCallback(
@@ -198,17 +202,45 @@ export default function ForceGraph({
         ctx.font = `${node.type === 'domain' ? '600 ' : '400 '}${fontSize}px Inter, -apple-system, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillStyle = isActive ? (isDark ? '#ffffffee' : '#000000ee') : (isDark ? '#ffffff88' : '#00000088');
-        ctx.fillText(node.label, x, y + radius + 2 / globalScale);
+
+        const labelY = y + radius + 2 / globalScale;
+        const labelText = node.label;
+        const textWidth = ctx.measureText(labelText).width;
+        const padX = 3 / globalScale;
+        const padY = 1.5 / globalScale;
+
+        // Background pill behind label
+        ctx.fillStyle = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+        ctx.beginPath();
+        const rx = x - textWidth / 2 - padX;
+        const ry = labelY - padY;
+        const rw = textWidth + padX * 2;
+        const rh = fontSize + padY * 2;
+        const cornerR = 2 / globalScale;
+        ctx.roundRect(rx, ry, rw, rh, cornerR);
+        ctx.fill();
+
+        // Label text
+        ctx.fillStyle = isActive ? (isDark ? '#ffffffee' : '#000000ee') : (isDark ? '#ffffffcc' : '#000000aa');
+        ctx.fillText(labelText, x, labelY);
 
         if (isActive && node.description) {
           const dSize = Math.max(7 / globalScale, 1.5);
           ctx.font = `300 ${dSize}px Inter, sans-serif`;
-          ctx.fillStyle = isDark ? '#ffffff44' : '#00000044';
           const desc = node.description.length > 55
             ? node.description.substring(0, 52) + '...'
             : node.description;
-          ctx.fillText(desc, x, y + radius + (4 + fontSize) / globalScale);
+          const descY = labelY + fontSize + padY * 2 + 1 / globalScale;
+          const descW = ctx.measureText(desc).width;
+
+          // Background for description
+          ctx.fillStyle = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.6)';
+          ctx.beginPath();
+          ctx.roundRect(x - descW / 2 - padX, descY - padY, descW + padX * 2, dSize + padY * 2, cornerR);
+          ctx.fill();
+
+          ctx.fillStyle = isDark ? '#ffffff88' : '#00000077';
+          ctx.fillText(desc, x, descY);
         }
       }
 
@@ -222,17 +254,42 @@ export default function ForceGraph({
     const node = nodeRaw as GraphNode;
     onNodeClick(node);
     if (graphRef.current) {
+      // Gentle zoom: center on node but keep neighbors visible
       graphRef.current.centerAt(node.x, node.y, 800);
-      graphRef.current.zoom(6, 800);
+      const currentZoom = graphRef.current.zoom();
+      const targetZoom = Math.min(currentZoom * 1.3, 2.5);
+      graphRef.current.zoom(targetZoom, 800);
     }
   }, [onNodeClick]);
 
-  const handleBackgroundClick = useCallback(() => {
+  useImperativeHandle(ref, () => ({
+    resetView: () => resetView(),
+  }));
+
+  const resetView = useCallback(() => {
     onNodeClick(null);
     if (graphRef.current) {
-      graphRef.current.zoomToFit(800, 60);
+      const w = typeof window !== 'undefined' ? window.innerWidth - 340 : 800;
+      const h = typeof window !== 'undefined' ? window.innerHeight : 600;
+      const viewSize = Math.min(w, h);
+      const zoom = viewSize / (DISC_RADIUS * 2) * 0.85;
+      graphRef.current.zoom(zoom, 800);
+      graphRef.current.centerAt(0, 0, 800);
     }
   }, [onNodeClick]);
+
+  // Escape key resets view
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') resetView();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [resetView]);
+
+  const handleBackgroundClick = useCallback(() => {
+    resetView();
+  }, [resetView]);
 
   return (
     <div className="absolute inset-0" style={{ background: colors.bg }}>
@@ -293,4 +350,6 @@ export default function ForceGraph({
       />
     </div>
   );
-}
+});
+
+export default ForceGraph;

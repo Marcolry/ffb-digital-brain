@@ -36,7 +36,7 @@ export default function SearchPanel({ data, onNodeSelect, isDark, colors }: Sear
   };
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[380px]">
+    <div className="absolute top-4 left-[320px] z-30 w-[280px]">
       <div className="relative">
         <div className="flex items-center backdrop-blur-xl rounded-xl px-4 py-2.5 shadow-2xl transition-all" style={{ background: colors.panelBg, borderWidth: 1, borderStyle: 'solid', borderColor: colors.panelBorder }}>
           <svg

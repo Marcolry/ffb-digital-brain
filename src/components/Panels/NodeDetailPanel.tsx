@@ -23,13 +23,13 @@ const TYPE_LABELS: Record<string, string> = {
   project: 'Projet',
 };
 
-export default function NodeDetailPanel({ node, data, onNodeSelect, isDark, colors }: NodeDetailPanelProps) {
+export default function NodeDetailPanel({ node, data, onNodeSelect, onClose, isDark, colors }: NodeDetailPanelProps) {
   return (
     <div
       className="absolute top-4 left-4 bottom-4 w-[300px] z-30 backdrop-blur-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col"
       style={{ background: colors.panelBg, borderWidth: 1, borderStyle: 'solid', borderColor: colors.panelBorder }}
     >
-      {node ? <NodeContent node={node} data={data} onNodeSelect={onNodeSelect} isDark={isDark} colors={colors} /> : <EmptyState data={data} isDark={isDark} colors={colors} />}
+      {node ? <NodeContent node={node} data={data} onNodeSelect={onNodeSelect} onClose={onClose} isDark={isDark} colors={colors} /> : <EmptyState data={data} isDark={isDark} colors={colors} />}
     </div>
   );
 }
@@ -166,7 +166,7 @@ function StatBar({ label, count, total, color }: { label: string; count: number;
   );
 }
 
-function NodeContent({ node, data, onNodeSelect, isDark, colors }: { node: GraphNode; data: GraphData; onNodeSelect: (node: GraphNode) => void; isDark: boolean; colors: Record<string, string> }) {
+function NodeContent({ node, data, onNodeSelect, onClose, isDark, colors }: { node: GraphNode; data: GraphData; onNodeSelect: (node: GraphNode) => void; onClose: () => void; isDark: boolean; colors: Record<string, string> }) {
   const connectedLinks = getConnectedLinks(node.id, data.links);
   const connectedNodes = connectedLinks
     .map(link => {
@@ -186,16 +186,29 @@ function NodeContent({ node, data, onNodeSelect, isDark, colors }: { node: Graph
     <>
       {/* Header */}
       <div className="p-4 border-b border-white/8">
-        <div className="flex items-center gap-2 mb-1">
-          <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: getNodeColor(node.group, node.type) }}
-          />
-          <span className="text-[10px] text-white/40 uppercase tracking-wider">
-            {TYPE_LABELS[node.type] || node.type}
-          </span>
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: getNodeColor(node.group, node.type) }}
+              />
+              <span className="text-[10px] text-white/40 uppercase tracking-wider">
+                {TYPE_LABELS[node.type] || node.type}
+              </span>
+            </div>
+            <h2 className="text-white text-base font-semibold leading-tight">{node.label}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/80 transition-colors p-1 -mr-1 -mt-1 flex-shrink-0"
+            title="Fermer (Échap)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <h2 className="text-white text-base font-semibold leading-tight">{node.label}</h2>
       </div>
 
       {/* Content */}
